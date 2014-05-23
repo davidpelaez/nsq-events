@@ -11,8 +11,18 @@ There are two sample handlers, one only shows how the log prints error messages 
 
 ## Examples
 
-* Listen for events in the `events` topic: `nsq_event_router --topic events  --lookupd-http-address localhost:4161 --handlers-dir sample-handlers`
-* Trigger the error event, that will always fail: `curl -d 'error ----' 'http://127.0.0.1:4151/put?topic=events'`
-* Trigger append event that creates/appends `hello world` to `samples-handlers/out.tmp`: `curl -d 'append hello world' 'http://127.0.0.1:4151/put?topic=events'`
-* Trigger the event with the cli binary (defaulting to localhost's nsqd): `nsq_trigger --topic events append "hello world!"`
-* Trigger the event with the cli binary (remote nsqd): `nsq_trigger --topic events --nsqd-http-address elsewhere:4151 append "hello world!"`
+
+Listen for events in the `events` topic:
+`nsq_event_router --topic events  --lookupd-http-address localhost:4161 --handlers-dir sample-handlers`
+
+Trigger the error event, that will always fail:
+`curl -d 'error ----' 'http://127.0.0.1:4151/put?topic=events'`
+
+Trigger append event (creates/appends the body, hello world, to `samples-handlers/out.tmp`):
+`curl -d 'append hello world' 'http://127.0.0.1:4151/put?topic=events'`
+
+Trigger the event with the cli binary (defaulting to localhost's nsqd):
+`nsq_trigger --topic events append "hello world!"`
+
+Trigger the event with the cli binary (remote nsqd):
+`nsq_trigger --topic events --nsqd-http-address elsewhere:4151 append "hello world!"`
