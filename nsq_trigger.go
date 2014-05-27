@@ -17,10 +17,9 @@ var (
 )
 
 func failWithUsage() {
-  flags := "--topic <queue> [--nsqd-http-address <address:port>]"
+  flags := "[--topic=events] [--nsqd-http-address=127.0.0.1:4151]"
   arguments := "<event_name> [<event_body>]"
   fmt.Println("e.g: nsq_trigger", flags, arguments)
-  fmt.Println("If no nsqd-http-address is provided, 127.0.0.1:4151 will be assumed")
   os.Exit(1)
 }
 
@@ -40,8 +39,7 @@ func main() {
   eventBody := strings.Join(flag.Args(), " ")
 
   if *topic == "" {
-    fmt.Println("--topic is required")
-    failWithUsage()
+    *topic = "events"
   }
 
   if *nsqdHTTPAddrs == "" {
