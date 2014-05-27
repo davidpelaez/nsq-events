@@ -1,0 +1,35 @@
+{
+	"ImportPath": "github.com/vlipco/nsq-events",
+	"GoVersion": "go1.2.2",
+	"Deps": [
+		{
+			"ImportPath": "code.google.com/p/snappy-go/snappy",
+			"Comment": "null-15",
+			"Rev": "12e4b4183793ac4b061921e7980845e750679fd0"
+		},
+		{
+			"ImportPath": "github.com/bitly/go-nsq",
+			"Comment": "v0.3.6",
+			"Rev": "1bebffb09ebaf4746a2cd23c85fdd1fd5beae092"
+		},
+		{
+			"ImportPath": "github.com/bitly/go-simplejson",
+			"Comment": "v0.4.3-15-g102f3f0",
+			"Rev": "102f3f069731c1a8123c3c75c69d9c9e463d8104"
+		},
+		{
+			"ImportPath": "github.com/bitly/nsq/util",
+			"Comment": "v0.2.28",
+			"Rev": "048691a8242c9ec224fc46bf7d05f321026b69f8"
+		},
+		{
+			"ImportPath": "github.com/bmizerany/perks/quantile",
+			"Rev": "6cb9d9d729303ee2628580d9aec5db968da3a607"
+		},
+		{
+			"ImportPath": "github.com/mreiferson/go-snappystream",
+			"Comment": "v0.1.1",
+			"Rev": "97c96e6648e99c2ce4fe7d169aa3f7368204e04d"
+		}
+	]
+}

@@ -26,3 +26,9 @@ Trigger the event with the cli binary (defaulting to localhost's nsqd):
 
 Trigger the event with the cli binary (remote nsqd):
 `nsq_trigger --topic events --nsqd-http-address elsewhere:4151 append "hello world!"`
+
+Development instructions
+====
+
+Make sure you have GOPATH defined and [godep](https://github.com/tools/godep)
+
