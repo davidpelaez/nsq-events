@@ -4,163 +4,192 @@
 package main
 
 import (
-  "flag"
-  "fmt"
-  "log"
-  "math/rand"
-  "strings"
-  "os"
-  "os/signal"
-  "os/exec"
-  "syscall"
-  "path"
-  "path/filepath"
-  "time"
+	"flag"
+	"fmt"
+  "regexp"
+	//"io/ioutil"
+	"log"
+	"math/rand"
+	"os"
+	"os/exec"
+	"os/signal"
+	"path"
+	"path/filepath"
+	"strings"
+	"syscall"
+	"time"
 
-  "github.com/bitly/go-nsq"
-  "github.com/bitly/nsq/util"
+	"github.com/bitly/go-nsq"
+	"github.com/bitly/nsq/util"
 )
 
 var (
-  showVersion = flag.Bool("version", false, "print version string")
+	showVersion = flag.Bool("version", false, "print version string")
 
-  topic         = flag.String("topic", "", "nsq topic")
-  handlersDir   = flag.String("handlers-dir", "", "directory with event handlers")
-  channel       = flag.String("channel", "", "nsq channel")
-  maxInFlight   = flag.Int("max-in-flight", 200, "max number of messages to allow in flight")
-  totalMessages = flag.Int("n", 0, "total messages to show (will wait if starved)")
+	topic         = flag.String("topic", "", "nsq topic")
+	handlersDir   = flag.String("handlers-dir", "", "directory with event handlers")
+	channel       = flag.String("channel", "", "nsq channel")
+	maxInFlight   = flag.Int("max-in-flight", 200, "max number of messages to allow in flight")
+	totalMessages = flag.Int("n", 0, "total messages to show (will wait if starved)")
 
-  readerOpts       = util.StringArray{}
-  nsqdTCPAddrs     = util.StringArray{}
-  lookupdHTTPAddrs = util.StringArray{}
+	readerOpts       = util.StringArray{}
+	nsqdTCPAddrs     = util.StringArray{}
+	lookupdHTTPAddrs = util.StringArray{}
+
 )
 
 func init() {
-  flag.Var(&readerOpts, "reader-opt", "option to passthrough to nsq.Reader (may be given multiple times)")
-  flag.Var(&nsqdTCPAddrs, "nsqd-tcp-address", "nsqd TCP address (may be given multiple times)")
-  flag.Var(&lookupdHTTPAddrs, "lookupd-http-address", "lookupd HTTP address (may be given multiple times)")
+	flag.Var(&readerOpts, "reader-opt", "option to passthrough to nsq.Reader (may be given multiple times)")
+	flag.Var(&nsqdTCPAddrs, "nsqd-tcp-address", "nsqd TCP address (may be given multiple times)")
+	flag.Var(&lookupdHTTPAddrs, "lookupd-http-address", "lookupd HTTP address (may be given multiple times)")
 }
 
 type EventRouter struct {
-  totalMessages int
-  messagesShown int
-  handlersDir string
+	totalMessages int
+	messagesShown int
+	handlersDir   string
 }
 
+
+
 func (th *EventRouter) HandleMessage(m *nsq.Message) error {
-  th.messagesShown++
-  
-  msgParts := strings.Split(string(m.Body), " ")
-  eventName := msgParts[0]
-  handlerArguments := strings.Join(msgParts[1:], " ")
+	th.messagesShown++
 
-  handlerPath := filepath.Join(th.handlersDir, eventName)
+	msgParts := strings.Split(string(m.Body), " ")
+	eventName := msgParts[0]
+	handlerArguments := strings.Join(msgParts[1:], " ")
 
-  if _, err := os.Stat(handlerPath); os.IsNotExist(err) {
-    log.Printf("Ignoring event %s. No handler found.", eventName)
-    return nil
+	handlerPath := filepath.Join(th.handlersDir, eventName)
+
+	if _, err := os.Stat(handlerPath); os.IsNotExist(err) {
+		log.Printf("Ignoring event %s. No handler found.", eventName)
+		return nil
+	}
+
+	cmd := exec.Command(handlerPath, handlerArguments)
+	cmd.Dir = th.handlersDir
+
+	log.Printf("Triggering event %s", eventName)
+
+	eventOutput, err := cmd.Output()
+
+  outputLines := strings.Split(string(eventOutput), "\n")
+  for i := range outputLines {
+    if outputLines[i] != "" {
+      log.Printf("[%s] %s", eventName, outputLines[i])
+    }
   }
 
-  cmd := exec.Command(handlerPath, handlerArguments)
-  cmd.Dir = th.handlersDir
+	if err != nil {
+		log.Printf("[%s] failed with error: %s", eventName, err.Error())
+		return nil
+	}
 
-  log.Printf("Triggering event %s", eventName)
+	if th.totalMessages > 0 && th.messagesShown >= th.totalMessages {
+		os.Exit(0)
+	}
 
-  _, err := cmd.Output()
+	return nil
+}
 
-  if err != nil {
-      log.Printf("ERROR: %s event handler failed with: %s", eventName, err.Error())
-      return nil
-  }
+var (
+  logDatetimePattern = regexp.MustCompile("^(\\S*\\s){2}")
+  queueAddressPattern = regexp.MustCompile("^\\[(.*)(event_router)(\\d+)(#ephemeral)\\]\\s")
+)
 
-  if th.totalMessages > 0 && th.messagesShown >= th.totalMessages {
-    os.Exit(0)
-  }
+type LogFilter int
 
-  return nil
+func (LogFilter) Write(p []byte) (int, error) {
+  printableMessage := string(p)
+  printableMessage = logDatetimePattern.ReplaceAllString(printableMessage,"")
+  printableMessage = queueAddressPattern.ReplaceAllString(printableMessage,"")
+  fmt.Print(printableMessage)
+	return len([]byte(printableMessage)), nil
 }
 
 func main() {
-  flag.Parse()
+	log.SetOutput(new(LogFilter))
 
-  if *showVersion {
-    fmt.Printf("nsq_event_router v%s\n", util.BINARY_VERSION)
-    return
-  }
+	flag.Parse()
 
-  if *channel == "" {
-    rand.Seed(time.Now().UnixNano())
-    *channel = fmt.Sprintf("event_router%06d#ephemeral", rand.Int()%999999)
-  }
+	if *showVersion {
+		fmt.Printf("nsq_event_router v%s\n", util.BINARY_VERSION)
+		return
+	}
 
-  if *topic == "" {
-    log.Fatalf("--topic is required")
-  }
+	if *channel == "" {
+		rand.Seed(time.Now().UnixNano())
+		*channel = fmt.Sprintf("event_router%06d#ephemeral", rand.Int()%999999)
+	}
 
-  if *handlersDir == "" {
-    log.Fatalf("--handlers-dir is required")
-  }
+	if *topic == "" {
+		log.Fatalf("--topic is required")
+	}
 
-  if len(nsqdTCPAddrs) == 0 && len(lookupdHTTPAddrs) == 0 {
-    log.Fatalf("--nsqd-tcp-address or --lookupd-http-address required")
-  }
-  if len(nsqdTCPAddrs) > 0 && len(lookupdHTTPAddrs) > 0 {
-    log.Fatalf("use --nsqd-tcp-address or --lookupd-http-address not both")
-  }
+	if *handlersDir == "" {
+		log.Fatalf("--handlers-dir is required")
+	}
 
-  sigChan := make(chan os.Signal, 1)
-  signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP)
+	if len(nsqdTCPAddrs) == 0 && len(lookupdHTTPAddrs) == 0 {
+		log.Fatalf("--nsqd-tcp-address or --lookupd-http-address required")
+	}
+	if len(nsqdTCPAddrs) > 0 && len(lookupdHTTPAddrs) > 0 {
+		log.Fatalf("use --nsqd-tcp-address or --lookupd-http-address not both")
+	}
 
-  r, err := nsq.NewReader(*topic, *channel)
-  if err != nil {
-    log.Fatalf(err.Error())
-  }
-  err = util.ParseReaderOpts(r, readerOpts)
-  if err != nil {
-    log.Fatalf(err.Error())
-  }
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP)
 
-  // Don't ask for more messages than we want
-  if *totalMessages > 0 && *totalMessages < *maxInFlight {
-    *maxInFlight = *totalMessages
-  }
-  r.SetMaxInFlight(*maxInFlight)
+	r, err := nsq.NewReader(*topic, *channel)
+	if err != nil {
+		log.Fatalf(err.Error())
+	}
+	err = util.ParseReaderOpts(r, readerOpts)
+	if err != nil {
+		log.Fatalf(err.Error())
+	}
 
-  cleanedHandlersDir := path.Clean(*handlersDir)
-  var absHandlersDir string
+	// Don't ask for more messages than we want
+	if *totalMessages > 0 && *totalMessages < *maxInFlight {
+		*maxInFlight = *totalMessages
+	}
+	r.SetMaxInFlight(*maxInFlight)
 
-  if strings.HasPrefix(cleanedHandlersDir, "/") { 
-    absHandlersDir = cleanedHandlersDir
-  }else{
-    cwd, _ := os.Getwd() 
-    absHandlersDir = path.Join(cwd, cleanedHandlersDir) 
-  } 
+	cleanedHandlersDir := path.Clean(*handlersDir)
+	var absHandlersDir string
 
-  log.Printf("Using handlers-dir %s", absHandlersDir)
+	if strings.HasPrefix(cleanedHandlersDir, "/") {
+		absHandlersDir = cleanedHandlersDir
+	} else {
+		cwd, _ := os.Getwd()
+		absHandlersDir = path.Join(cwd, cleanedHandlersDir)
+	}
 
-  r.AddHandler(&EventRouter{ totalMessages: *totalMessages, handlersDir: absHandlersDir})
+	log.Printf("Using handlers-dir %s", absHandlersDir)
 
-  for _, addrString := range nsqdTCPAddrs {
-    err := r.ConnectToNSQ(addrString)
-    if err != nil {
-      log.Fatalf(err.Error())
-    }
-  }
+	r.AddHandler(&EventRouter{totalMessages: *totalMessages, handlersDir: absHandlersDir})
 
-  for _, addrString := range lookupdHTTPAddrs {
-    log.Printf("lookupd addr %s", addrString)
-    err := r.ConnectToLookupd(addrString)
-    if err != nil {
-      log.Fatalf(err.Error())
-    }
-  }
+	for _, addrString := range nsqdTCPAddrs {
+		err := r.ConnectToNSQ(addrString)
+		if err != nil {
+			log.Fatalf(err.Error())
+		}
+	}
 
-  for {
-    select {
-    case <-r.ExitChan:
-      return
-    case <-sigChan:
-      r.Stop()
-    }
-  }
+	for _, addrString := range lookupdHTTPAddrs {
+		log.Printf("lookupd addr %s", addrString)
+		err := r.ConnectToLookupd(addrString)
+		if err != nil {
+			log.Fatalf(err.Error())
+		}
+	}
+
+	for {
+		select {
+		case <-r.ExitChan:
+			return
+		case <-sigChan:
+			r.Stop()
+		}
+	}
 }

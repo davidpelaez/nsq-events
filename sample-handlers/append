@@ -1,3 +1,4 @@
 #!/bin/bash
-
+echo "I'm the append event handler"
+echo "Appending '$@' to out.tmp"
 echo $@ >> out.tmp
