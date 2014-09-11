@@ -1,5 +1,5 @@
 {
-	"ImportPath": "github.com/vlipco/nsq-events",
+	"ImportPath": "github.com/davidpelaez/nsq-events",
 	"GoVersion": "go1.2.2",
 	"Deps": [
 		{
